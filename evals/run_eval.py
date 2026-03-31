@@ -17,8 +17,8 @@ import uuid
 # regardless of which directory the script is invoked from.
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+from langchain_openai import ChatOpenAI
 from langsmith import Client
-from openevals.llm import create_llm_as_judge
 
 from main import qa_assistant
 
@@ -30,8 +30,12 @@ DATASET_NAME = os.environ.get("EVAL_DATASET_NAME", "QA Accuracy Eval")
 EXPERIMENT_PREFIX = os.environ.get("EVAL_EXPERIMENT_PREFIX", "qa-accuracy")
 ACCURACY_THRESHOLD = float(os.environ.get("ACCURACY_THRESHOLD", "7"))
 
-# The prompt instructs the LLM judge to return a score from 1-10.
-ACCURACY_PROMPT = """\
+
+def accuracy_evaluator(
+    inputs: dict, outputs: dict, reference_outputs: dict
+) -> dict:
+    """LLM-as-judge evaluator that scores accuracy on a 1-10 scale."""
+    prompt = f"""\
 You are an expert evaluator. Given a QUESTION, the CONTEXT provided to the \
 assistant, the assistant's ANSWER, and the REFERENCE answer, score the \
 assistant's ANSWER for accuracy on a scale of 1 to 10.
@@ -44,23 +48,28 @@ contains inaccuracies.
 - 1-3: Mostly wrong — significant factual errors or largely irrelevant.
 
 <question>
-{inputs[question]}
+{inputs["question"]}
 </question>
 
 <context>
-{inputs[context]}
+{inputs.get("context", "")}
 </context>
 
 <answer>
-{outputs[answer]}
+{outputs["answer"]}
 </answer>
 
 <reference_answer>
-{reference_outputs[answer]}
+{reference_outputs["answer"]}
 </reference_answer>
 
-Return ONLY a JSON object: {{"score": <integer 1-10>}}
-"""
+Return ONLY a JSON object with a single key "score" whose value is an integer \
+from 1 to 10. Example: {{"score": 8}}"""
+
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+    response = llm.invoke([{"role": "user", "content": prompt}])
+    score = json.loads(response.content)["score"]
+    return {"key": "accuracy", "score": int(score)}
 
 
 def _parse_threshold() -> float:
@@ -81,14 +90,6 @@ def main():
     print(f"Experiment: {experiment_name}")
     print(f"Threshold:  {threshold}/10")
     print()
-
-    # -- Evaluator -----------------------------------------------------------
-    accuracy_evaluator = create_llm_as_judge(
-        prompt=ACCURACY_PROMPT,
-        feedback_key="accuracy",
-        choices=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
-        model="openai:gpt-4o-mini",
-    )
 
     # -- Run evaluation ------------------------------------------------------
     results = client.evaluate(
