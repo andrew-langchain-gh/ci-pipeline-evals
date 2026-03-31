@@ -86,10 +86,7 @@ def main():
     accuracy_evaluator = create_llm_as_judge(
         prompt=ACCURACY_PROMPT,
         feedback_key="accuracy",
-        score_config={
-            "min": 1,
-            "max": 10,
-        },
+        choices=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
         model="openai:gpt-4o-mini",
     )
 
