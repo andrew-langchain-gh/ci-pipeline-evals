@@ -13,6 +13,10 @@ import os
 import sys
 import uuid
 
+# Ensure the project root is on the Python path so `main` is importable
+# regardless of which directory the script is invoked from.
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
 from langsmith import Client
 from openevals.llm import create_llm_as_judge
 
