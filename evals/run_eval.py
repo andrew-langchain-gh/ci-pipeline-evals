@@ -101,6 +101,10 @@ def main():
         blocking=True,
     )
 
+    # -- Capture the real experiment name (LangSmith appends a suffix) --------
+    actual_experiment_name = results.experiment_name
+    print(f"LangSmith experiment: {actual_experiment_name}")
+
     # -- Aggregate scores ----------------------------------------------------
     scores = []
     for result in results:
@@ -120,7 +124,7 @@ def main():
 
     # -- Write config artifact for the report job ----------------------------
     config = {
-        "experiment_name": experiment_name,
+        "experiment_name": actual_experiment_name,
         "dataset_name": DATASET_NAME,
         "criteria": {
             "accuracy": f">={threshold}",
