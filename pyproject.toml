@@ -1,0 +1,11 @@
+[project]
+name = "ci-pipeline-evals"
+version = "0.1.0"
+description = "Example: LangSmith offline evals integrated with GitHub CI/CD"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "langsmith>=0.3.0",
+    "langchain-openai",
+    "openevals",
+]
