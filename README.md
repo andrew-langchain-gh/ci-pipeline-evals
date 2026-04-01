@@ -154,6 +154,15 @@ uv run python evals/create_dataset.py
 
 The workflow triggers automatically on every PR to `main`. The evaluate job gates the PR — if accuracy is below threshold, the check fails.
 
+```bash
+git checkout -b test-eval-001
+git commit --allow-empty -m "trigger eval"
+git push -u origin test-eval-001
+```
+
+In GitHub go to UI, create PR and merge. The action will kick off.
+
+
 ### 4. Manual trigger (optional)
 
 Go to `Actions > LangSmith Eval Pipeline > Run workflow` to trigger manually. You can override the accuracy threshold in the input field.
