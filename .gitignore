@@ -12,3 +12,6 @@ wheels/
 # Eval artifacts (generated at runtime)
 evaluation_config__*.json
 eval_report.md
+
+.env
+.idea
