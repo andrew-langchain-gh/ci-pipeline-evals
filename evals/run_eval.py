@@ -11,6 +11,7 @@ Exit code 0 = pass, 1 = fail (accuracy below threshold).
 import json
 import os
 import sys
+import time
 import uuid
 
 # Ensure the project root is on the Python path so `main` is importable
@@ -84,6 +85,30 @@ def _parse_threshold() -> float:
     return ACCURACY_THRESHOLD
 
 
+def _wait_for_runs(
+    client: Client, run_ids: list, timeout: int = 30, poll_interval: float = 2
+):
+    """Poll until all runs are available server-side.
+
+    After client.evaluate(), runs may still be ingesting asynchronously.
+    The annotation queue API returns 404 if the runs aren't persisted yet.
+    """
+    pending = set(str(r) for r in run_ids)
+    deadline = time.time() + timeout
+    while pending and time.time() < deadline:
+        still_pending = set()
+        for rid in pending:
+            try:
+                client.read_run(rid)
+            except Exception:
+                still_pending.add(rid)
+        pending = still_pending
+        if pending:
+            time.sleep(poll_interval)
+    if pending:
+        print(f"WARNING: {len(pending)} run(s) not available after {timeout}s")
+
+
 def _get_or_create_annotation_queue(client: Client, name: str):
     """Return an existing annotation queue by name, or create a new one."""
     queues = list(client.list_annotation_queues(name=name, limit=1))
@@ -145,8 +170,8 @@ def main():
 
     # -- Add failing runs to annotation queue --------------------------------
     if failing_run_ids:
-        # Flush any pending run data so all runs are available server-side
         client.flush()
+        _wait_for_runs(client, failing_run_ids)
         queue = _get_or_create_annotation_queue(client, ANNOTATION_QUEUE_NAME)
         client.add_runs_to_annotation_queue(
             queue_id=queue.id,
