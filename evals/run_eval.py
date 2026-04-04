@@ -145,6 +145,8 @@ def main():
 
     # -- Add failing runs to annotation queue --------------------------------
     if failing_run_ids:
+        # Flush any pending run data so all runs are available server-side
+        client.flush()
         queue = _get_or_create_annotation_queue(client, ANNOTATION_QUEUE_NAME)
         client.add_runs_to_annotation_queue(
             queue_id=queue.id,
