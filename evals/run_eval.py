@@ -29,6 +29,9 @@ from main import qa_assistant
 DATASET_NAME = os.environ.get("EVAL_DATASET_NAME", "QA Accuracy Eval")
 EXPERIMENT_PREFIX = os.environ.get("EVAL_EXPERIMENT_PREFIX", "qa-accuracy")
 ACCURACY_THRESHOLD = float(os.environ.get("ACCURACY_THRESHOLD", "7"))
+ANNOTATION_QUEUE_NAME = os.environ.get(
+    "ANNOTATION_QUEUE_NAME", "Low Accuracy Reviews"
+)
 
 
 def accuracy_evaluator(
@@ -81,6 +84,17 @@ def _parse_threshold() -> float:
     return ACCURACY_THRESHOLD
 
 
+def _get_or_create_annotation_queue(client: Client, name: str):
+    """Return an existing annotation queue by name, or create a new one."""
+    queues = list(client.list_annotation_queues(name=name, limit=1))
+    if queues:
+        return queues[0]
+    return client.create_annotation_queue(
+        name=name,
+        description="Automatically populated with eval runs that scored below threshold.",
+    )
+
+
 def main():
     threshold = _parse_threshold()
     client = Client()
@@ -105,22 +119,41 @@ def main():
     actual_experiment_name = results.experiment_name
     print(f"LangSmith experiment: {actual_experiment_name}")
 
-    # -- Aggregate scores ----------------------------------------------------
-    scores = []
+    # -- Check each result against threshold ----------------------------------
+    failing_run_ids = []
+    all_scores = []
+
     for result in results:
+        run_id = result["run"].id
         for eval_result in result["evaluation_results"]["results"]:
             if eval_result.key == "accuracy" and eval_result.score is not None:
-                scores.append(eval_result.score)
+                score = eval_result.score
+                all_scores.append(score)
+                if score < threshold:
+                    failing_run_ids.append(run_id)
+                    print(f"  BELOW THRESHOLD: run {run_id} scored {score}/10")
 
-    if not scores:
+    if not all_scores:
         print("ERROR: No accuracy scores were produced.")
         sys.exit(1)
 
-    avg_score = sum(scores) / len(scores)
-    print(f"Results: {len(scores)} examples evaluated")
+    avg_score = sum(all_scores) / len(all_scores)
+    print(f"\nResults: {len(all_scores)} examples evaluated")
     print(f"Average accuracy: {avg_score:.2f}/10")
-    print(f"Threshold:        {threshold}/10")
+    print(f"Below threshold:  {len(failing_run_ids)}/{len(all_scores)}")
     print()
+
+    # -- Add failing runs to annotation queue --------------------------------
+    if failing_run_ids:
+        queue = _get_or_create_annotation_queue(client, ANNOTATION_QUEUE_NAME)
+        client.add_runs_to_annotation_queue(
+            queue_id=queue.id,
+            run_ids=failing_run_ids,
+        )
+        print(
+            f"Added {len(failing_run_ids)} failing run(s) to annotation queue "
+            f"'{ANNOTATION_QUEUE_NAME}'"
+        )
 
     # -- Write config artifact for the report job ----------------------------
     config = {
@@ -136,11 +169,14 @@ def main():
     print(f"Wrote config artifact: {config_path}")
 
     # -- Gate ----------------------------------------------------------------
-    if avg_score < threshold:
-        print(f"\nFAILED: Average accuracy {avg_score:.2f} is below threshold {threshold}")
+    if failing_run_ids:
+        print(
+            f"\nFAILED: {len(failing_run_ids)} result(s) scored below "
+            f"threshold {threshold}/10"
+        )
         sys.exit(1)
 
-    print(f"\nPASSED: Average accuracy {avg_score:.2f} meets threshold {threshold}")
+    print(f"\nPASSED: All results meet threshold {threshold}/10")
 
 
 if __name__ == "__main__":

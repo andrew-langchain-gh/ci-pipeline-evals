@@ -13,8 +13,9 @@ PR opened
 |                                                     |
 |  1. Run qa_assistant against a LangSmith dataset    |
 |  2. LLM-as-judge scores each answer (1-10)          |
-|  3. Compare average score against threshold         |
-|  4. Exit non-zero if below threshold  <-- GATE      |
+|  3. Check each result against threshold             |
+|  4. Add failing runs to annotation queue            |
+|  5. Exit non-zero if any result fails  <-- GATE     |
 +-------------------------+---------------------------+
                           |
                           v
@@ -27,7 +28,7 @@ PR opened
 +-----------------------------------------------------+
 ```
 
-The **evaluate** job is the quality gate. If the average accuracy score falls below the threshold, the job exits with code 1, which fails the GitHub Actions check on the PR. The **report** job runs regardless of whether the evaluate job passed or failed, so you always get a summary posted as a PR comment.
+The **evaluate** job is the quality gate. Each individual result is checked against the threshold — if *any* result scores below it, the failing runs are added to a **LangSmith annotation queue** for human review, and the job exits with code 1 to fail the GitHub Actions check on the PR. The **report** job runs regardless of whether the evaluate job passed or failed, so you always get a summary posted as a PR comment.
 
 ## Project Structure
 
@@ -53,8 +54,9 @@ The core mechanism is in `evals/run_eval.py`:
 
 1. **`client.evaluate()`** runs your target function (`qa_assistant`) against every example in a LangSmith dataset
 2. A **custom evaluator function** acts as an LLM-as-judge — it sends the question, context, answer, and reference answer to GPT-4o-mini, which returns an accuracy score from 1-10
-3. The script computes the **average score** across all examples
-4. If the average is **below the threshold**, the script calls `sys.exit(1)`, which fails the CI job
+3. Each result is **individually checked** against the threshold — any result scoring below it is flagged
+4. Failing runs are added to a **LangSmith annotation queue** (default: "Low Accuracy Reviews") for human review
+5. If **any result fails**, the script calls `sys.exit(1)`, which fails the CI job
 
 ### The Config Artifact Pattern
 
@@ -176,6 +178,7 @@ Go to `Settings > Branches`, add a branch protection rule for `main`, enable **"
 | What | How |
 |------|-----|
 | **Threshold** | `--threshold` CLI flag, `ACCURACY_THRESHOLD` env var, or `workflow_dispatch` input |
+| **Annotation queue** | `ANNOTATION_QUEUE_NAME` env var (default: `"Low Accuracy Reviews"`) |
 | **Dataset** | Change `EVAL_DATASET_NAME` env var or edit `evals/create_dataset.py` |
 | **Target app model** | Swap `gpt-4o-mini` in `main.py` |
 | **Judge model** | Swap `gpt-4o-mini` in the `accuracy_evaluator` function in `evals/run_eval.py` |
