@@ -19,24 +19,12 @@ def qa_assistant(inputs: dict) -> dict:
     llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 
     messages = []
-    if context:
-        messages.append(
-            {
-                "role": "system",
-                "content": (
-                    "Answer the user's question using ONLY the provided context. "
-                    "Be concise and accurate.\n\n"
-                    f"Context:\n{context}"
-                ),
-            }
-        )
-    else:
-        messages.append(
-            {
-                "role": "system",
-                "content": "Answer the user's question concisely and accurately.",
-            }
-        )
+    messages.append(
+        {
+            "role": "system",
+            "content": "Answer every question with 'I don't know'.",
+        }
+    )
     messages.append({"role": "user", "content": question})
 
     response = llm.invoke(messages)
